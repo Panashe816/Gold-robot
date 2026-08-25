@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import aiohttp
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from metaapi_cloud_sdk import MetaApi
 
 
@@ -31,61 +32,6 @@ from metaapi_cloud_sdk import MetaApi
 # IMPORTANT:
 # DEMO ONLY
 #
-# Symbol:
-#     XAUUSD_i
-#
-# Positions:
-#     2 per signal
-#
-# Volume:
-#     0.01 each
-#
-# Entry:
-#     Original signal range is checked first.
-#
-#     If current price is outside the original range,
-#     the bot allows a 30-pip extension:
-#
-#     SELL:
-#         extend LOWER boundary downward
-#
-#     BUY:
-#         extend UPPER boundary upward
-#
-# Example SELL:
-#
-#     Original:
-#         4630 - 4633
-#
-#     Extended:
-#         4627 - 4633
-#
-# Example BUY:
-#
-#     Original:
-#         4621 - 4624
-#
-#     Extended:
-#         4621 - 4627
-#
-# TP MAPPING:
-#
-# Gold Signal VIP
-#     TP3 + TP6
-#
-# Gold Hunter Trade
-#     TP3 + TP4
-#
-# Gold Signals 98% Sure
-#     TP3 + TP4
-#
-# Gold VIP Signals Insights
-#     TP3 + TP6
-#
-# GUNS THE TRADER
-#     4 TPs -> TP3 + TP4
-#     6 TPs -> TP3 + TP6
-#
 # ============================================================
 
 
@@ -97,7 +43,25 @@ load_dotenv()
 # ============================================================
 
 TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
+
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
+
+
+# ============================================================
+# TELEGRAM SESSION
+# ============================================================
+#
+# RENDER:
+#     Uses TELEGRAM_SESSION_STRING
+#
+# LOCAL COMPUTER:
+#     Can still use the existing .session file
+#
+# ============================================================
+
+TELEGRAM_SESSION_STRING = os.getenv(
+    "TELEGRAM_SESSION_STRING"
+)
 
 TELEGRAM_SESSION = os.getenv(
     "TELEGRAM_SESSION",
@@ -109,7 +73,9 @@ TELEGRAM_SESSION = os.getenv(
 # TELEGRAM BOT NOTIFICATION
 # ============================================================
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv(
+    "TELEGRAM_BOT_TOKEN"
+)
 
 TELEGRAM_OUTPUT_CHANNEL_ID = os.getenv(
     "TELEGRAM_CHANNEL_ID",
@@ -121,8 +87,13 @@ TELEGRAM_OUTPUT_CHANNEL_ID = os.getenv(
 # METAAPI
 # ============================================================
 
-METAAPI_TOKEN = os.getenv("METAAPI_TOKEN")
-METAAPI_ACCOUNT_ID = os.getenv("METAAPI_ACCOUNT_ID")
+METAAPI_TOKEN = os.getenv(
+    "METAAPI_TOKEN"
+)
+
+METAAPI_ACCOUNT_ID = os.getenv(
+    "METAAPI_ACCOUNT_ID"
+)
 
 
 # ============================================================
@@ -140,34 +111,6 @@ DEMO_ONLY = True
 
 # ============================================================
 # ENTRY EXTENSION
-# ============================================================
-#
-# Gold is quoted with 3 decimal places on this account.
-#
-# We treat:
-#
-#     1 pip = 0.1 XAUUSD price
-#
-# Therefore:
-#
-#     30 pips = 3.0 price units
-#
-# Example SELL:
-#
-#     4630 - 4633
-#
-# becomes:
-#
-#     4627 - 4633
-#
-# Example BUY:
-#
-#     4621 - 4624
-#
-# becomes:
-#
-#     4621 - 4627
-#
 # ============================================================
 
 ENTRY_EXTENSION_PIPS = 30
@@ -303,7 +246,9 @@ def save_executed_signals():
 
     try:
 
-        data = list(executed_signals)[-500:]
+        data = list(
+            executed_signals
+        )[-500:]
 
         with open(
             EXECUTED_SIGNALS_FILE,
@@ -345,18 +290,27 @@ def make_json_safe(value):
 
         return value
 
-    if isinstance(value, datetime):
+    if isinstance(
+        value,
+        datetime
+    ):
 
         return value.isoformat()
 
-    if isinstance(value, dict):
+    if isinstance(
+        value,
+        dict
+    ):
 
         return {
             str(key): make_json_safe(val)
             for key, val in value.items()
         }
 
-    if isinstance(value, (list, tuple)):
+    if isinstance(
+        value,
+        (list, tuple)
+    ):
 
         return [
             make_json_safe(item)
@@ -390,7 +344,10 @@ def save_trade_log(record):
 
                     existing = json.load(f)
 
-                    if isinstance(existing, list):
+                    if isinstance(
+                        existing,
+                        list
+                    ):
 
                         records = existing
 
@@ -527,7 +484,6 @@ def normalize_channel_name(name):
 
         "𝗦": "S",
         "𝗜": "I",
-        "𝗚": "G",
         "𝗔": "A",
         "𝗩": "V",
         "𝗣": "P",
@@ -562,12 +518,6 @@ def get_tp_mapping(
 
     # --------------------------------------------------------
     # GUNS THE TRADER
-    #
-    # Dynamic:
-    #
-    # 4 TPs -> TP3 + TP4
-    # 6 TPs -> TP3 + TP6
-    #
     # --------------------------------------------------------
 
     if (
@@ -909,13 +859,13 @@ async def connect_metaapi():
     if not METAAPI_TOKEN:
 
         raise RuntimeError(
-            "METAAPI_TOKEN missing from .env"
+            "METAAPI_TOKEN missing"
         )
 
     if not METAAPI_ACCOUNT_ID:
 
         raise RuntimeError(
-            "METAAPI_ACCOUNT_ID missing from .env"
+            "METAAPI_ACCOUNT_ID missing"
         )
 
     metaapi = MetaApi(
@@ -1135,34 +1085,12 @@ def calculate_execution_range(
 
     extended_high = original_high
 
-    # --------------------------------------------------------
-    # SELL
-    #
-    # Extend LOWER boundary downward.
-    #
-    # 4630 - 4633
-    # becomes
-    # 4627 - 4633
-    #
-    # --------------------------------------------------------
-
     if direction == "SELL":
 
         extended_low = (
             original_low
             - ENTRY_EXTENSION_PRICE
         )
-
-    # --------------------------------------------------------
-    # BUY
-    #
-    # Extend UPPER boundary upward.
-    #
-    # 4621 - 4624
-    # becomes
-    # 4621 - 4627
-    #
-    # --------------------------------------------------------
 
     elif direction == "BUY":
 
@@ -1206,30 +1134,17 @@ def price_inside_entry_range(
         direction
     ).upper()
 
-    # --------------------------------------------------------
-    # BUY uses ASK
-    # SELL uses BID
-    # --------------------------------------------------------
-
     market_price = (
         ask
         if direction == "BUY"
         else bid
     )
 
-    # --------------------------------------------------------
-    # ORIGINAL RANGE
-    # --------------------------------------------------------
-
     original_inside = (
         original_low
         <= market_price
         <= original_high
     )
-
-    # --------------------------------------------------------
-    # EXTENDED RANGE
-    # --------------------------------------------------------
 
     extended_inside = (
         extended_low
@@ -1401,10 +1316,6 @@ async def execute_position(
             result
         )
 
-        # ----------------------------------------------------
-        # Verify successful MetaApi execution
-        # ----------------------------------------------------
-
         if isinstance(
             result,
             dict
@@ -1438,7 +1349,6 @@ async def execute_position(
 
                 return result
 
-        print()
         print(
             f"⚠️ Position "
             f"{position_number} "
@@ -1449,7 +1359,6 @@ async def execute_position(
 
     except Exception as e:
 
-        print()
         print(
             f"❌ Position "
             f"{position_number} failed: "
@@ -1699,7 +1608,7 @@ async def execute_signal(
         return
 
     # --------------------------------------------------------
-    # ENTRY RANGE WITH 30-PIP EXTENSION
+    # ENTRY RANGE
     # --------------------------------------------------------
 
     (
@@ -1769,7 +1678,7 @@ async def execute_signal(
             return
 
     # --------------------------------------------------------
-    # SHOW EXTENSION STATUS
+    # EXTENSION STATUS
     # --------------------------------------------------------
 
     if extension_used:
@@ -1813,7 +1722,6 @@ async def execute_signal(
 
     if not result_1:
 
-        print()
         print(
             "❌ Position 1 failed."
         )
@@ -1839,7 +1747,6 @@ async def execute_signal(
 
     if not result_2:
 
-        print()
         print(
             "❌ Position 2 failed."
         )
@@ -1856,8 +1763,6 @@ async def execute_signal(
             "Position 2: FAILED"
         )
 
-        # Do NOT mark the signal as fully
-        # executed because position 2 failed.
         return
 
     # --------------------------------------------------------
@@ -2370,7 +2275,7 @@ async def main():
 
         print(
             "❌ TELEGRAM_API_ID "
-            "missing from .env"
+            "missing"
         )
 
         return
@@ -2379,10 +2284,43 @@ async def main():
 
         print(
             "❌ TELEGRAM_API_HASH "
-            "missing from .env"
+            "missing"
         )
 
         return
+
+    # --------------------------------------------------------
+    # TELEGRAM SESSION CHECK
+    # --------------------------------------------------------
+
+    if TELEGRAM_SESSION_STRING:
+
+        print(
+            "🔐 Telegram authentication mode:"
+        )
+
+        print(
+            "   StringSession"
+        )
+
+        print(
+            "   ✅ TELEGRAM_SESSION_STRING found"
+        )
+
+    else:
+
+        print(
+            "🔐 Telegram authentication mode:"
+        )
+
+        print(
+            "   Local .session file"
+        )
+
+        print(
+            f"   Session: "
+            f"{TELEGRAM_SESSION}"
+        )
 
     # --------------------------------------------------------
     # LOAD MEMORY
@@ -2430,16 +2368,43 @@ async def main():
     )
     print("=" * 70)
 
-    client = TelegramClient(
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Render uses StringSession.
+    #
+    # Local computer can still use:
+    # gold_signal_bot.session
+    #
+    # --------------------------------------------------------
 
-        TELEGRAM_SESSION,
+    if TELEGRAM_SESSION_STRING:
 
-        int(
-            TELEGRAM_API_ID
-        ),
+        client = TelegramClient(
 
-        TELEGRAM_API_HASH
-    )
+            StringSession(
+                TELEGRAM_SESSION_STRING
+            ),
+
+            int(
+                TELEGRAM_API_ID
+            ),
+
+            TELEGRAM_API_HASH
+        )
+
+    else:
+
+        client = TelegramClient(
+
+            TELEGRAM_SESSION,
+
+            int(
+                TELEGRAM_API_ID
+            ),
+
+            TELEGRAM_API_HASH
+        )
 
     try:
 
@@ -2513,11 +2478,11 @@ async def main():
         )
 
         print(
-            f"  • Position 1: source TP mapping"
+            "  • Position 1: source TP mapping"
         )
 
         print(
-            f"  • Position 2: source TP mapping"
+            "  • Position 2: source TP mapping"
         )
 
         print(
